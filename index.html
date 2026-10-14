@@ -1,0 +1,170 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GLITCHSHIFT: SOLID MODE</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#050817;color:white;font-family:Arial,sans-serif}
+#hud{position:fixed;top:16px;left:18px;z-index:2;pointer-events:none;text-shadow:0 2px 8px #000}
+h1{color:#21eaff;letter-spacing:3px;margin:0}
+#info{line-height:1.8;font-size:14px}
+#start{position:fixed;inset:0;display:grid;place-content:center;text-align:center;background:#030716dd;z-index:3}
+#start h2{color:#21eaff;font-size:42px;margin:0 0 12px}
+button{padding:14px 25px;border:0;border-radius:8px;background:#16eacb;color:#00101b;font-weight:bold;font-size:17px;cursor:pointer}
+#message{font-size:14px}
+</style>
+</head>
+<body>
+<div id="hud">
+<h1>GLITCHSHIFT</h1>
+<b>SOLID MODE</b>
+<div id="info">WASD move · SPACE jump · R respawn</div>
+</div>
+<div id="start">
+<h2>GLITCHSHIFT</h2>
+<p>Jump across the neon platforms. Reach the finish!</p>
+<p id="message">WASD to move · Space to jump · Mouse to look</p>
+<button id="play">START RUN</button>
+</div>
+<script type="module">
+import * as THREE from
+'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js';
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x050817);
+scene.fog=new THREE.Fog(0x050817,30,100);
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,150);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled=true;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0x9bdcff,0x15152b,2));
+const light=new THREE.DirectionalLight(0xffffff,2);
+light.position.set(-5,15,8);
+light.castShadow=true;
+scene.add(light);
+
+function mat(c,e=0){return new THREE.MeshStandardMaterial({
+color:c,emissive:e,roughness:.4,metalness:.2});}
+
+const edge=mat(0x007dff,0x006aff);
+const platforms=[];
+function platform(x,y,z,w,d){
+const base=new THREE.Mesh(new THREE.BoxGeometry(w,.5,d),mat(0x123b72,0x071b3b));
+base.position.set(x,y,z);base.receiveShadow=true;scene.add(base);
+const top=new THREE.Mesh(new THREE.BoxGeometry(w+.05,.06,d+.05),edge);
+top.position.set(x,y+.28,z);scene.add(top);
+platforms.push({x,y,z,w,d});
+}
+platform(0,0,0,8,8);
+platform(0,0,-8,4,4);
+platform(3,.5,-14,4,4);
+platform(6,1,-20,4,4);
+platform(6,1,-27,7,4);
+platform(1,1.5,-33,4,4);
+platform(-4,2,-39,4,4);
+platform(-4,2,-46,7,5);
+platform(1,2.5,-53,4,4);
+platform(6,3,-60,4,4);
+platform(6,3,-67,8,7);
+
+const player=new THREE.Group();
+const body=new THREE.Mesh(new THREE.BoxGeometry(.65,.9,.45),mat(0x17eaff,0x009dff));
+body.position.y=.55;body.castShadow=true;player.add(body);
+const visor=new THREE.Mesh(new THREE.BoxGeometry(.4,.15,.06),mat(0xffffff,0x22ccff));
+visor.position.set(0,.68,-.24);body.add(visor);
+scene.add(player);
+
+const finish=new THREE.Group();
+for(const x of [-2,2]){
+const p=new THREE.Mesh(new THREE.BoxGeometry(.2,3,.2),mat(0x24ffff,0x00dfff));
+p.position.set(x,1.5,0);finish.add(p);
+}
+const bar=new THREE.Mesh(new THREE.BoxGeometry(4.2,.2,.2),mat(0x24ffff,0x00dfff));
+bar.position.y=3;finish.add(bar);
+finish.position.set(6,3,-67);scene.add(finish);
+
+for(let i=0;i<35;i++){
+const gem=new THREE.Mesh(new THREE.OctahedronGeometry(.3+Math.random()*.5),
+mat(i%2?0x254dff:0x7a22ff,i%2?0x1233ff:0x5611ff));
+gem.position.set((Math.random()-.5)*50,-2+Math.random()*18,-Math.random()*80);
+scene.add(gem);
+}
+
+const keys={};
+let playing=false,won=false,ground=false,vy=0,time=0,yaw=0;
+let spawn=new THREE.Vector3(0,0,0);
+const info=document.querySelector('#info');
+const start=document.querySelector('#start');
+const clock=new THREE.Clock();
+
+document.querySelector('#play').onclick=()=>{
+if(won){player.position.copy(spawn);time=0;won=false;}
+playing=true;start.style.display='none';
+renderer.domElement.requestPointerLock?.();
+};
+document.addEventListener('keydown',e=>{
+keys[e.code]=true;
+if(e.code==='Space')e.preventDefault();
+if(e.code==='KeyR'){player.position.copy(spawn);vy=0;}
+});
+document.addEventListener('keyup',e=>keys[e.code]=false);
+document.addEventListener('mousemove',e=>{
+if(document.pointerLockElement===renderer.domElement)yaw-=e.movementX*.0025;
+});
+renderer.domElement.addEventListener('click',()=>{
+if(playing)renderer.domElement.requestPointerLock?.();
+});
+
+function animate(){
+requestAnimationFrame(animate);
+const dt=Math.min(clock.getDelta(),.04);
+if(playing&&!won){
+time+=dt;
+const f=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+const r=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+const m=new THREE.Vector3();
+if(keys.KeyW||keys.ArrowUp)m.add(f);
+if(keys.KeyS||keys.ArrowDown)m.sub(f);
+if(keys.KeyD||keys.ArrowRight)m.add(r);
+if(keys.KeyA||keys.ArrowLeft)m.sub(r);
+if(m.lengthSq()){m.normalize().multiplyScalar(8*dt);player.position.add(m);player.rotation.y=yaw;}
+if(keys.Space&&ground){vy=9;ground=false;}
+vy-=22*dt;
+player.position.y+=vy*dt;
+ground=false;
+for(const p of platforms){
+const inside=Math.abs(player.position.x-p.x)<p.w/2+.2&&Math.abs(player.position.z-p.z)<p.d/2+.2;
+if(inside&&vy<=0&&player.position.y>=p.y&&player.position.y<p.y+.5){
+player.position.y=p.y;vy=0;ground=true;
+}}
+if(player.position.y < -10){player.position.copy(spawn);vy=0;}
+if(player.position.z < -44&&player.position.z > -49&&Math.abs(player.position.x+4)<3.5)
+spawn.set(-4,2,-46);
+if(player.position.z < -65&&Math.abs(player.position.x-6)<4&&player.position.y>=3){
+won=true;document.exitPointerLock?.();start.style.display='grid';
+start.querySelector('h2').textContent='LEVEL COMPLETE!';
+start.querySelector('p').textContent='Your time: '+time.toFixed(2)+' seconds';
+document.querySelector('#play').textContent='PLAY AGAIN';
+}
+info.innerHTML=`WASD move · SPACE jump · R respawn<br>Time: ${time.toFixed(1)}s`;
+}
+const target=player.position.clone().add(new THREE.Vector3(0,1,0));
+camera.position.set(target.x+Math.sin(yaw)*7,target.y+3.5,target.z+Math.cos(yaw)*7);
+camera.lookAt(target);
+renderer.render(scene,camera);
+}
+animate();
+addEventListener('resize',()=>{
+camera.aspect=innerWidth/innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(innerWidth,innerHeight);
+});
+</script>
+</body>
+</html>
